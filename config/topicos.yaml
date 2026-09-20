@@ -1,0 +1,26 @@
+# Tópicos monitorados. Cada um tem a query de cada fonte.
+#
+# PubMed usa a sintaxe das E-utilities (campos entre colchetes, AND/OR/NOT).
+# medRxiv não tem busca por termo na API: o filtro é feito localmente sobre
+# título e abstract dos preprints do período, então liste palavras simples.
+
+topicos:
+  - nome: calibração de modelos clínicos
+    pubmed: (calibration[Title/Abstract]) AND (clinical prediction[Title/Abstract])
+    medrxiv:
+      - calibration
+      - calibrated
+      - miscalibration
+
+  - nome: fairness em IA médica
+    pubmed: (fairness[Title/Abstract] OR algorithmic bias[Title/Abstract]) AND (health[Title/Abstract])
+    medrxiv:
+      - fairness
+      - algorithmic bias
+      - health equity
+
+  - nome: multicalibração
+    pubmed: multicalibration[All Fields]
+    medrxiv:
+      - multicalibration
+      - multi-calibration
