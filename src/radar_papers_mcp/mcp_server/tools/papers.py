@@ -24,7 +24,7 @@ AVISO_BASE_VAZIA = (
     "A base local ainda não foi sincronizada. Rode 'papers-cli sync' antes de consultar."
 )
 AVISO_BASE_TRAVADA = (
-    "A base local existe mas não pôde ser lida agora — provavelmente há um sync em "
+    "A base local existe mas não pôde ser lida agora, provavelmente há um sync em "
     "andamento. Tente de novo em alguns minutos."
 )
 AVISO_RESUMO = (

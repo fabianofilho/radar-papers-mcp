@@ -51,7 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_papers_fonte ON papers (fonte);
 
 
 class BaseIndisponivel(RuntimeError):
-    """A base existe mas está travada — tipicamente um sync em curso."""
+    """A base existe mas está travada, tipicamente um sync em curso."""
 
 
 def aplicar_schema(conexao: duckdb.DuckDBPyConnection) -> None:

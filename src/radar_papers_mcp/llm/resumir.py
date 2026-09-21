@@ -17,7 +17,7 @@ NOME_TEMPLATE = "resumir_paper.jinja2"
 
 
 class AbstractAusente(ValueError):
-    """Sem abstract não há o que resumir — e inventar seria pior."""
+    """Sem abstract não há o que resumir, e inventar seria pior."""
 
 
 class ResumoPaper(BaseModel):

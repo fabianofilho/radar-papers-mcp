@@ -30,7 +30,7 @@ class Paper:
         """DOI quando existe; senão o id da fonte.
 
         A deduplicação é por DOI porque o mesmo paper aparece em buscas de
-        tópicos diferentes — e um preprint do medRxiv pode depois sair no PubMed
+        tópicos diferentes, e um preprint do medRxiv pode depois sair no PubMed
         com o mesmo DOI.
         """
         return (self.doi or f"{self.fonte}:{self.identificador}").lower()

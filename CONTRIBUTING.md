@@ -40,5 +40,5 @@ nao dimensionados para volume automatizado.
 - Um PR que aumente a frequencia de acesso as fontes precisa justificar por que.
 
 O rate limit da NCBI e aplicado de verdade: passar de 3 requisicoes por segundo
-sem chave devolve erro. Uma chave gratuita eleva o limite para 10/s — configure em
+sem chave devolve erro. Uma chave gratuita eleva o limite para 10/s, configure em
 `PUBMED_API_KEY` em vez de contornar o limitador.

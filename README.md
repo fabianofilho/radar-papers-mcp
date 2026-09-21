@@ -7,7 +7,7 @@ os papers com um LLM local. Guarda o resultado numa base local, deduplicado por 
 >
 > - **O resumo sai do abstract, não do texto completo.** Ele serve para triagem: decidir
 >   se vale abrir o paper. Não substitui a leitura.
-> - **O resumo é gerado por LLM e pode errar.** Confira os números no abstract original —
+> - **O resumo é gerado por LLM e pode errar.** Confira os números no abstract original,
 >   o link vem em toda resposta.
 > - **A cobertura depende das suas queries.** O que não casa com a query configurada
 >   simplesmente não aparece; ausência de resultado não significa ausência de literatura.
@@ -18,8 +18,8 @@ os papers com um LLM local. Guarda o resultado numa base local, deduplicado por 
 | --- | --- | --- |
 | Python | 3.12+ | runtime |
 | [uv](https://docs.astral.sh/uv/) | recente | dependências e venv |
-| Um LLM local com API OpenAI-compatible | — | resumo dos papers |
-| Chave da NCBI (opcional) | — | eleva o rate limit de 3 para 10 req/s |
+| Um LLM local com API OpenAI-compatible | - | resumo dos papers |
+| Chave da NCBI (opcional) | - | eleva o rate limit de 3 para 10 req/s |
 
 ## Instalação
 
@@ -102,7 +102,7 @@ Esse é um retorno real. O resumo fica cacheado: o mesmo paper não é resumido 
 | PubMed | E-utilities (`esearch` + `efetch`) | **3 req/s sem chave, 10 com chave** |
 | medRxiv | `api.medrxiv.org/details` | sem busca por termo; paginado de 100 em 100 |
 
-O rate limit da NCBI é aplicado de verdade — a primeira tentativa de teste deste projeto
+O rate limit da NCBI é aplicado de verdade, a primeira tentativa de teste deste projeto
 recebeu `{"error": "API rate limit exceeded"}`. O fetcher espaça as requisições conforme a
 chave configurada.
 
@@ -126,7 +126,7 @@ plausível que torna a ferramenta inútil para pesquisa.
 descartados no filtro local. O padrão é limitado a 5 páginas (500 preprints) por execução.
 
 **A query do PubMed é sua responsabilidade.** Uma query mal formada devolve zero sem erro.
-Teste no [PubMed](https://pubmed.ncbi.nlm.nih.gov/) antes de colocar no YAML — na prática,
+Teste no [PubMed](https://pubmed.ncbi.nlm.nih.gov/) antes de colocar no YAML, na prática,
 buscas muito específicas devolvem pouquíssimo (`multicalibration` retorna ~14 resultados
 em toda a base).
 
@@ -139,7 +139,7 @@ que o modelo interpretou errado.
 ## Privacidade
 
 - **Sai da máquina:** requisições ao PubMed (NCBI) e ao medRxiv. Se você configurar uma
-  chave da NCBI, ela vai junto nas requisições — é o funcionamento normal da API.
+  chave da NCBI, ela vai junto nas requisições, é o funcionamento normal da API.
 - **Não sai:** seus tópicos de pesquisa ficam no arquivo local; as queries vão às APIs
   como qualquer busca.
 - O abstract vai para o seu LLM no resumo.
@@ -152,7 +152,7 @@ sincronização em loop nem contorne o limitador de taxa.
 
 ## Licença e atribuição
 
-[MIT](LICENSE) — este projeto é agregação de literatura e metadados abertos, sem contato
+[MIT](LICENSE): este projeto é agregação de literatura e metadados abertos, sem contato
 com regulação, conduta clínica ou dado de paciente.
 
 Construído no contexto do [IA.med](https://iamed.cc).

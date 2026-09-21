@@ -1,7 +1,7 @@
 """Cliente da API E-utilities do PubMed.
 
 esearch devolve os IDs, efetch devolve o detalhe em XML. O rate limit da NCBI é
-de 3 requisições por segundo sem chave e 10 com chave — e ele é aplicado de
+de 3 requisições por segundo sem chave e 10 com chave, e ele é aplicado de
 verdade: passar disso devolve ``{"error": "API rate limit exceeded"}``.
 """
 
