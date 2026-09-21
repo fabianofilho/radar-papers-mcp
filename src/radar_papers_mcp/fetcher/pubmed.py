@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 FONTE = "pubmed"
-USER_AGENT = "radar-papers-mcp/0.1 (uso pessoal)"
+USER_AGENT = "radar-papers-mcp/0.1 (+https://github.com/fabianofilho/radar-papers-mcp)"
 
 _MESES = {
     "jan": 1,

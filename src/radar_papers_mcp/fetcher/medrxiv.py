@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 
 BASE = "https://api.medrxiv.org/details"
 FONTE = "medrxiv"
-USER_AGENT = "radar-papers-mcp/0.1 (uso pessoal)"
+# Identifica o projeto para quem administra o portal, com link para o repositorio.
+# Um coletor publico anonimo e ma cidadania: se algo incomodar do outro lado,
+# precisa haver como descobrir o que e e falar com quem mantem.
+USER_AGENT = "radar-papers-mcp/0.1 (+https://github.com/fabianofilho/radar-papers-mcp)"
 POR_PAGINA = 100
 
 

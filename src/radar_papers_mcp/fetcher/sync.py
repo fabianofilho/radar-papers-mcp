@@ -15,6 +15,12 @@ from radar_papers_mcp.store.queries import gravar
 
 logger = logging.getLogger(__name__)
 
+# Espalha o disparo dentro de meia hora. Num projeto publico isso nao e
+# detalhe: horario fixo resolve a concorrencia na maquina de quem roda, mas
+# cria concorrencia do outro lado se varias pessoas usarem o padrao do
+# .env.example e baterem no mesmo servidor no mesmo minuto.
+JITTER_SEGUNDOS = 1800
+
 
 @dataclass(frozen=True)
 class ResultadoSync:
@@ -96,7 +102,8 @@ def agendar_sync(
 
     hora, minuto = (int(p) for p in hora_local.split(":"))
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(tarefa, "cron", hour=hora, minute=minuto)
+    # jitter: ver JITTER_SEGUNDOS no topo do modulo
+    scheduler.add_job(tarefa, "cron", hour=hora, minute=minuto, jitter=JITTER_SEGUNDOS)
     scheduler.start()
     logger.info("sync de papers agendado diariamente às %s", hora_local)
     return scheduler
