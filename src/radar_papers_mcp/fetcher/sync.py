@@ -1,10 +1,13 @@
-"""Busca em PubMed e medRxiv, por tópico, e grava deduplicado."""
+"""Busca em PubMed e medRxiv, por tópico, e grava deduplicado.
+
+O agendamento fica fora do processo: um timer systemd roda ``papers-cli sync``
+uma vez por dia (veja deploy/ e o README).
+"""
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 import duckdb
 
@@ -14,12 +17,6 @@ from radar_papers_mcp.fetcher.pubmed import MAX_IDS, PubMed
 from radar_papers_mcp.store.queries import gravar
 
 logger = logging.getLogger(__name__)
-
-# Espalha o disparo dentro de meia hora. Num projeto publico isso nao e
-# detalhe: horario fixo resolve a concorrencia na maquina de quem roda, mas
-# cria concorrencia do outro lado se varias pessoas usarem o padrao do
-# .env.example e baterem no mesmo servidor no mesmo minuto.
-JITTER_SEGUNDOS = 1800
 
 
 @dataclass(frozen=True)
@@ -83,27 +80,3 @@ async def sincronizar(
             logger.info("medRxiv/%s: %d preprints (%d novos)", topico.nome, len(casados), n)
 
     return ResultadoSync(novos=novos, ja_conhecidos=ja_conhecidos, por_fonte=por_fonte)
-
-
-def agendar_sync(
-    caminho_db: str, hora_local: str, topicos: list[Topico], pubmed_api_key: str | None
-) -> Any:
-    """Agenda a busca num horário fixo e devolve o scheduler iniciado."""
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
-    from radar_papers_mcp.store.db import conectar
-
-    async def tarefa() -> None:
-        try:
-            with conectar(caminho_db) as conexao:
-                await sincronizar(conexao, topicos, pubmed_api_key=pubmed_api_key)
-        except Exception:  # noqa: BLE001 - o agendador não pode morrer por um sync
-            logger.exception("sync de papers falhou")
-
-    hora, minuto = (int(p) for p in hora_local.split(":"))
-    scheduler = AsyncIOScheduler()
-    # jitter: ver JITTER_SEGUNDOS no topo do modulo
-    scheduler.add_job(tarefa, "cron", hour=hora, minute=minuto, jitter=JITTER_SEGUNDOS)
-    scheduler.start()
-    logger.info("sync de papers agendado diariamente às %s", hora_local)
-    return scheduler

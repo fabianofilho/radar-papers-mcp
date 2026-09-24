@@ -8,7 +8,6 @@ dependencies = [
     "mcp>=1.2",
     "httpx>=0.28",
     "duckdb>=1.1",
-    "apscheduler>=3.10",
     "typer>=0.15",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
@@ -49,7 +48,3 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.12"
 strict = true
 files = ["src"]
-
-[[tool.mypy.overrides]]
-module = ["apscheduler.*"]
-ignore_missing_imports = true

@@ -1,0 +1,20 @@
+# Sync diário do radar-papers-mcp: busca no PubMed e no medRxiv e grava na base local.
+# Instalação: veja a seção "Sync agendado" do README.
+# Supõe o repositório em ~/radar-papers-mcp e o uv em ~/.local/bin/uv; ajuste os
+# caminhos se for diferente na sua máquina.
+[Unit]
+Description=Busca papers novos no PubMed e medRxiv
+Documentation=https://github.com/fabianofilho/radar-papers-mcp
+# Sem rede, o sync falha e o timer tenta de novo no dia seguinte.
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/radar-papers-mcp
+ExecStart=%h/.local/bin/uv --directory %h/radar-papers-mcp run papers-cli sync
+# O sync pagina a janela inteira do medRxiv (por volta de mil preprints por
+# semana) e respeita o rate limit da NCBI; numa rede ruim pode demorar.
+TimeoutStartSec=3600
+# Não deixa o sync competir com o uso interativo da máquina.
+Nice=10
+IOSchedulingClass=idle
