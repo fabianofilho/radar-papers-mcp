@@ -10,7 +10,7 @@ import duckdb
 
 from radar_papers_mcp.config import Topico
 from radar_papers_mcp.fetcher.medrxiv import MedRxiv, casa_termos
-from radar_papers_mcp.fetcher.pubmed import PubMed
+from radar_papers_mcp.fetcher.pubmed import MAX_IDS, PubMed
 from radar_papers_mcp.store.queries import gravar
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ async def sincronizar(
     *,
     dias: int = 7,
     pubmed_api_key: str | None = None,
-    retmax: int = 50,
+    max_ids_pubmed: int = MAX_IDS,
     incluir_medrxiv: bool = True,
 ) -> ResultadoSync:
     """Busca cada tópico nas duas fontes e grava.
@@ -52,7 +52,7 @@ async def sincronizar(
             if not topico.pubmed:
                 continue
             try:
-                papers = await pubmed.buscar(topico.pubmed, dias=dias, retmax=retmax)
+                papers = await pubmed.buscar(topico.pubmed, dias=dias, max_ids=max_ids_pubmed)
             except Exception as erro:  # noqa: BLE001 - uma query ruim não para o sync
                 logger.warning("PubMed falhou para %r: %s", topico.nome, erro)
                 continue

@@ -9,10 +9,12 @@ import logging
 import typer
 
 from radar_papers_mcp.config import carregar_config, carregar_topicos
+from radar_papers_mcp.fetcher.pubmed import PubMed
 from radar_papers_mcp.fetcher.sync import sincronizar
 from radar_papers_mcp.llm.qwen_client import QwenClient
 from radar_papers_mcp.mcp_server.tools.papers import buscar_papers_novos, resumir_paper
 from radar_papers_mcp.store.db import conectar
+from radar_papers_mcp.store.queries import corrigir_data_entrada, ids_pubmed
 
 app = typer.Typer(help="Administração do radar-papers-mcp", no_args_is_help=True)
 
@@ -55,6 +57,25 @@ def sync(
         )
 
     asyncio.run(rodar())
+
+
+@app.command()
+def corrigir_datas() -> None:
+    """Relê no PubMed a data de entrada (Entrez) dos papers já gravados.
+
+    Uso único depois de migrar uma base da versão 1, em que a data de entrada do
+    PubMed foi aproximada pelo dia da coleta. Faz um efetch a cada 200 papers.
+    """
+    config = carregar_config()
+
+    async def rodar() -> int:
+        with conectar(config.duckdb_path) as conexao:
+            ids = ids_pubmed(conexao)
+            async with PubMed(api_key=config.pubmed_api_key or None) as pubmed:
+                papers = await pubmed.detalhes(ids)
+            return corrigir_data_entrada(conexao, papers)
+
+    typer.echo(f"{asyncio.run(rodar())} papers do PubMed com a data de entrada corrigida")
 
 
 @app.command()
