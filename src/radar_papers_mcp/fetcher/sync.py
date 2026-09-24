@@ -24,6 +24,10 @@ class ResultadoSync:
     novos: int
     ja_conhecidos: int
     por_fonte: dict[str, int]
+    # Uma entrada por fonte ou tópico que falhou ("pubmed/<tópico>: erro",
+    # "medrxiv: erro"). O sync segue com o que deu certo, mas quem chama decide
+    # se isso é falha; o papers-cli sai com código 1 para o systemd registrar.
+    falhas: tuple[str, ...] = ()
 
 
 async def sincronizar(
@@ -43,6 +47,7 @@ async def sincronizar(
     """
     novos = ja_conhecidos = 0
     por_fonte: dict[str, int] = {"pubmed": 0, "medrxiv": 0}
+    falhas: list[str] = []
 
     async with PubMed(api_key=pubmed_api_key) as pubmed:
         for topico in topicos:
@@ -51,7 +56,8 @@ async def sincronizar(
             try:
                 papers = await pubmed.buscar(topico.pubmed, dias=dias, max_ids=max_ids_pubmed)
             except Exception as erro:  # noqa: BLE001 - uma query ruim não para o sync
-                logger.warning("PubMed falhou para %r: %s", topico.nome, erro)
+                logger.error("PubMed falhou para %r: %s", topico.nome, erro)
+                falhas.append(f"pubmed/{topico.nome}: {erro}")
                 continue
             por_fonte["pubmed"] += len(papers)
             n, j = gravar(conexao, papers, topico.nome)
@@ -64,7 +70,8 @@ async def sincronizar(
             try:
                 preprints = await medrxiv.periodo(dias=dias)
             except Exception as erro:  # noqa: BLE001
-                logger.warning("medRxiv falhou: %s", erro)
+                logger.error("medRxiv falhou: %s", erro)
+                falhas.append(f"medrxiv: {erro}")
                 preprints = []
 
         for topico in topicos:
@@ -79,4 +86,9 @@ async def sincronizar(
             ja_conhecidos += j
             logger.info("medRxiv/%s: %d preprints (%d novos)", topico.nome, len(casados), n)
 
-    return ResultadoSync(novos=novos, ja_conhecidos=ja_conhecidos, por_fonte=por_fonte)
+    return ResultadoSync(
+        novos=novos,
+        ja_conhecidos=ja_conhecidos,
+        por_fonte=por_fonte,
+        falhas=tuple(falhas),
+    )

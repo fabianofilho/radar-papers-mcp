@@ -10,7 +10,7 @@ import typer
 
 from radar_papers_mcp.config import carregar_config, carregar_topicos
 from radar_papers_mcp.fetcher.pubmed import PubMed
-from radar_papers_mcp.fetcher.sync import sincronizar
+from radar_papers_mcp.fetcher.sync import ResultadoSync, sincronizar
 from radar_papers_mcp.llm.qwen_client import QwenClient
 from radar_papers_mcp.mcp_server.tools.papers import buscar_papers_novos, resumir_paper
 from radar_papers_mcp.store.db import conectar
@@ -41,7 +41,7 @@ def sync(
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    async def rodar() -> None:
+    async def rodar() -> ResultadoSync:
         lista = carregar_topicos(config.topicos_path)
         with conectar(config.duckdb_path) as conexao:
             resultado = await sincronizar(
@@ -55,8 +55,15 @@ def sync(
             f"{resultado.novos} novos, {resultado.ja_conhecidos} já conhecidos "
             f"(pubmed: {resultado.por_fonte['pubmed']}, medrxiv: {resultado.por_fonte['medrxiv']})"
         )
+        return resultado
 
-    asyncio.run(rodar())
+    resultado = asyncio.run(rodar())
+    if resultado.falhas:
+        # Código de saída não zero para o systemd marcar o serviço como falho e
+        # disparar o OnFailure; o que as outras fontes trouxeram já foi gravado.
+        for falha in resultado.falhas:
+            typer.echo(f"falhou: {falha}", err=True)
+        raise typer.Exit(code=1)
 
 
 @app.command()
