@@ -7,7 +7,7 @@ import sys
 
 from mcp.server.mcpserver import MCPServer
 
-from radar_papers_mcp.config import carregar_config
+from radar_papers_mcp.config import TopicosInvalidos, carregar_config, carregar_topicos
 from radar_papers_mcp.mcp_server.tools.papers import RespostaBusca, RespostaResumo
 from radar_papers_mcp.mcp_server.tools.papers import buscar_papers_novos as _buscar_papers_novos
 from radar_papers_mcp.mcp_server.tools.papers import resumir_paper as _resumir_paper
@@ -36,8 +36,17 @@ async def buscar_papers_novos(topico: str = "", dias: int = 7, limite: int = 50)
         limite: máximo de resultados devolvidos, de 1 a 200. Os mais recentes vêm primeiro.
     """
     config = carregar_config()
+    try:
+        configurados = [t.nome for t in carregar_topicos(config.topicos_path)]
+    except TopicosInvalidos as erro:
+        logger.warning("tópicos não carregados: %s", erro)
+        configurados = []
     return await _buscar_papers_novos(
-        topico or None, dias, caminho_db=str(config.duckdb_path), limite=limite
+        topico or None,
+        dias,
+        caminho_db=str(config.duckdb_path),
+        limite=limite,
+        topicos_configurados=configurados,
     )
 
 

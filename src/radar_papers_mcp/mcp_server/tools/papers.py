@@ -141,8 +141,13 @@ async def buscar_papers_novos(
     *,
     caminho_db: str,
     limite: int = LIMITE_PADRAO,
+    topicos_configurados: list[str] | None = None,
 ) -> RespostaBusca:
-    """Papers que entraram na fonte no período, opcionalmente filtrados por tópico."""
+    """Papers que entraram na fonte no período, opcionalmente filtrados por tópico.
+
+    Os tópicos válidos são os que têm papers na base mais os de
+    ``topicos_configurados`` (config/topicos.yaml), que podem ainda não ter nenhum.
+    """
 
     def vazia(aviso: str | None) -> RespostaBusca:
         return RespostaBusca(topico=topico, dias=dias, total=0, resultados=[], aviso=aviso)
@@ -153,7 +158,7 @@ async def buscar_papers_novos(
         return vazia(f"O parâmetro 'limite' precisa estar entre 1 e {LIMITE_MAX}.")
 
     def consultar(conexao: Any) -> tuple[str | None, list[str], list[dict[str, Any]], int]:
-        disponiveis = topicos_na_base(conexao)
+        disponiveis = sorted(set(topicos_na_base(conexao)) | set(topicos_configurados or []))
         nome: str | None = None
         if topico:
             casados = resolver_topico(topico, disponiveis)

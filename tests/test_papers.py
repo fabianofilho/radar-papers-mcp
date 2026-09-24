@@ -151,6 +151,17 @@ async def test_topico_desconhecido_lista_os_validos(caminho_db: str) -> None:
     assert "fairness em IA médica" in resposta.aviso
 
 
+async def test_topico_configurado_sem_papers_nao_e_desconhecido(caminho_db: str) -> None:
+    with conectar(caminho_db) as conexao:
+        gravar(conexao, [_paper()], "calibração de modelos clínicos")
+    resposta = await buscar_papers_novos(
+        "multicalibracao", 7, caminho_db=caminho_db, topicos_configurados=TOPICOS
+    )
+    assert resposta.topico == "multicalibração"
+    assert resposta.total == 0
+    assert resposta.aviso == "Nenhum paper novo no período para esse tópico."
+
+
 # --- resumo ----------------------------------------------------------------
 
 
