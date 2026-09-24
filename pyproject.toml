@@ -3,12 +3,13 @@ name = "radar-papers-mcp"
 version = "0.1.0"
 description = "Servidor MCP que monitora PubMed e medRxiv por tópicos de pesquisa e resume papers com LLM local"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
-    "mcp>=1.2",
+    "mcp>=2.2,<3",
     "httpx>=0.28",
     "duckdb>=1.1",
-    "apscheduler>=3.10",
     "typer>=0.15",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
@@ -49,7 +50,3 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.12"
 strict = true
 files = ["src"]
-
-[[tool.mypy.overrides]]
-module = ["apscheduler.*"]
-ignore_missing_imports = true

@@ -24,6 +24,10 @@ class Paper:
     data_publicacao: date | None
     abstract: str | None
     url: str
+    # Quando o paper entrou na fonte (Entrez no PubMed, postagem no medRxiv).
+    # É por ela que "novo" é decidido: a data da edição da revista pode ser
+    # meses antes ou depois da entrada, e vem incompleta (só ano, ou ano e mês).
+    data_entrada: date | None = None
 
     @property
     def chave(self) -> str:

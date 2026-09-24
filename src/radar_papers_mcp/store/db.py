@@ -11,7 +11,7 @@ import duckdb
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSAO = 1
+SCHEMA_VERSAO = 2
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS papers (
@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS papers (
     abstract         VARCHAR,
     url              VARCHAR NOT NULL,
     topicos          VARCHAR,
-    data_coleta      TIMESTAMP DEFAULT current_timestamp
+    data_coleta      TIMESTAMP DEFAULT current_timestamp,
+    data_entrada     DATE
 );
 
 CREATE TABLE IF NOT EXISTS resumos (
@@ -49,6 +50,19 @@ CREATE INDEX IF NOT EXISTS idx_papers_data ON papers (data_publicacao);
 CREATE INDEX IF NOT EXISTS idx_papers_fonte ON papers (fonte);
 """
 
+# Versão 1 -> 2: 'data_entrada' passa a decidir o que é novo. Nas linhas antigas
+# o medRxiv já tinha a data de postagem em data_publicacao; no PubMed a melhor
+# aproximação disponível é o dia da última coleta, até o próximo sync regravar a
+# data de entrada real (Entrez).
+_MIGRACAO_2 = """
+ALTER TABLE papers ADD COLUMN IF NOT EXISTS data_entrada DATE;
+UPDATE papers
+SET data_entrada = CASE WHEN fonte = 'medrxiv' THEN data_publicacao
+                        ELSE CAST(data_coleta AS DATE) END
+WHERE data_entrada IS NULL;
+CREATE INDEX IF NOT EXISTS idx_papers_entrada ON papers (data_entrada);
+"""
+
 
 class BaseIndisponivel(RuntimeError):
     """A base existe mas está travada, tipicamente um sync em curso."""
@@ -56,6 +70,7 @@ class BaseIndisponivel(RuntimeError):
 
 def aplicar_schema(conexao: duckdb.DuckDBPyConnection) -> None:
     conexao.execute(_DDL)
+    conexao.execute(_MIGRACAO_2)
     conexao.execute(
         "INSERT INTO schema_meta VALUES ('versao', ?) "
         "ON CONFLICT (chave) DO UPDATE SET valor = excluded.valor",

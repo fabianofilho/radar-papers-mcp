@@ -9,10 +9,12 @@ import logging
 import typer
 
 from radar_papers_mcp.config import carregar_config, carregar_topicos
-from radar_papers_mcp.fetcher.sync import sincronizar
+from radar_papers_mcp.fetcher.pubmed import PubMed
+from radar_papers_mcp.fetcher.sync import ResultadoSync, sincronizar
 from radar_papers_mcp.llm.qwen_client import QwenClient
 from radar_papers_mcp.mcp_server.tools.papers import buscar_papers_novos, resumir_paper
 from radar_papers_mcp.store.db import conectar
+from radar_papers_mcp.store.queries import corrigir_data_entrada, ids_pubmed
 
 app = typer.Typer(help="Administração do radar-papers-mcp", no_args_is_help=True)
 
@@ -39,7 +41,7 @@ def sync(
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    async def rodar() -> None:
+    async def rodar() -> ResultadoSync:
         lista = carregar_topicos(config.topicos_path)
         with conectar(config.duckdb_path) as conexao:
             resultado = await sincronizar(
@@ -53,8 +55,34 @@ def sync(
             f"{resultado.novos} novos, {resultado.ja_conhecidos} já conhecidos "
             f"(pubmed: {resultado.por_fonte['pubmed']}, medrxiv: {resultado.por_fonte['medrxiv']})"
         )
+        return resultado
 
-    asyncio.run(rodar())
+    resultado = asyncio.run(rodar())
+    if resultado.falhas:
+        # Código de saída não zero para o systemd marcar o serviço como falho e
+        # disparar o OnFailure; o que as outras fontes trouxeram já foi gravado.
+        for falha in resultado.falhas:
+            typer.echo(f"falhou: {falha}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def corrigir_datas() -> None:
+    """Relê no PubMed a data de entrada (Entrez) dos papers já gravados.
+
+    Uso único depois de migrar uma base da versão 1, em que a data de entrada do
+    PubMed foi aproximada pelo dia da coleta. Faz um efetch a cada 200 papers.
+    """
+    config = carregar_config()
+
+    async def rodar() -> int:
+        with conectar(config.duckdb_path) as conexao:
+            ids = ids_pubmed(conexao)
+            async with PubMed(api_key=config.pubmed_api_key or None) as pubmed:
+                papers = await pubmed.detalhes(ids)
+            return corrigir_data_entrada(conexao, papers)
+
+    typer.echo(f"{asyncio.run(rodar())} papers do PubMed com a data de entrada corrigida")
 
 
 @app.command()

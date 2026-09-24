@@ -1,0 +1,15 @@
+# Agenda o radar-papers-sync.service uma vez por dia, de madrugada.
+[Unit]
+Description=Agenda o sync diário do radar-papers-mcp
+Documentation=https://github.com/fabianofilho/radar-papers-mcp
+
+[Timer]
+OnCalendar=*-*-* 04:10:00
+# Espalha o disparo em até 30 min, para que várias máquinas rodando este projeto
+# não batam no PubMed e no medRxiv, que são serviços públicos, no mesmo minuto.
+RandomizedDelaySec=1800
+# Se a máquina estava desligada no horário, roda assim que ligar.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

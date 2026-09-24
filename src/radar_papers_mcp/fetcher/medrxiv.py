@@ -23,6 +23,9 @@ FONTE = "medrxiv"
 # precisa haver como descobrir o que e e falar com quem mantem.
 USER_AGENT = "radar-papers-mcp/0.1 (+https://github.com/fabianofilho/radar-papers-mcp)"
 POR_PAGINA = 100
+# Teto de páginas por sync (10 mil preprints). Uma semana do medRxiv tem por volta
+# de mil; o teto só existe para um backfill muito largo não rodar sem fim.
+MAX_PAGINAS = 100
 
 
 class MedRxivIndisponivel(RuntimeError):
@@ -52,6 +55,7 @@ def parse_colecao(corpo: dict[str, object], servidor: str = "medrxiv") -> list[P
         titulo = str(item.get("title") or "").strip()
         if not titulo:
             continue
+        postado = _data(str(item.get("date") or ""))
         papers.append(
             Paper(
                 doi=doi,
@@ -60,12 +64,24 @@ def parse_colecao(corpo: dict[str, object], servidor: str = "medrxiv") -> list[P
                 titulo=titulo,
                 autores=str(item.get("authors") or "").strip() or None,
                 veiculo=f"{servidor} (preprint)",
-                data_publicacao=_data(str(item.get("date") or "")),
+                data_publicacao=postado,
                 abstract=str(item.get("abstract") or "").strip() or None,
                 url=f"https://doi.org/{doi}" if doi else "https://www.medrxiv.org/",
+                data_entrada=postado,
             )
         )
     return papers
+
+
+def total_da_janela(corpo: dict[str, object]) -> int | None:
+    """O ``messages[0].total`` da resposta: quantos preprints a janela tem."""
+    mensagens = corpo.get("messages")
+    if not isinstance(mensagens, list) or not mensagens or not isinstance(mensagens[0], dict):
+        return None
+    try:
+        return int(str(mensagens[0].get("total")))
+    except ValueError:
+        return None
 
 
 def casa_termos(paper: Paper, termos: tuple[str, ...]) -> bool:
@@ -97,15 +113,17 @@ class MedRxiv:
             await self._client.aclose()
             self._client = None
 
-    async def periodo(self, *, dias: int, max_paginas: int = 5) -> list[Paper]:
-        """Preprints publicados nos últimos ``dias``.
+    async def periodo(self, *, dias: int, max_paginas: int = MAX_PAGINAS) -> list[Paper]:
+        """Preprints postados nos últimos ``dias``.
 
-        ``max_paginas`` limita o volume: a API pagina de 100 em 100 e uma janela
-        larga pode trazer milhares de preprints que serão descartados no filtro.
+        Pagina até o total que a API informa para a janela. A ordem da API não é
+        cronológica, então parar antes do fim deixaria buracos em dias quaisquer
+        da janela. Se ``max_paginas`` for atingido, registra um aviso no log.
         """
         fim = date.today()
         inicio = fim - timedelta(days=dias)
         papers: list[Paper] = []
+        total: int | None = None
 
         for pagina in range(max_paginas):
             cursor = pagina * POR_PAGINA
@@ -113,11 +131,33 @@ class MedRxiv:
                 f"{BASE}/{self._servidor}/{inicio.isoformat()}/{fim.isoformat()}/{cursor}"
             )
             resposta.raise_for_status()
-            atual = parse_colecao(resposta.json(), self._servidor)
+            corpo = resposta.json()
+            atual = parse_colecao(corpo, self._servidor)
             papers.extend(atual)
-            if len(atual) < POR_PAGINA:
+            if total is None:
+                total = total_da_janela(corpo)
+            if not atual:
                 break
-        logger.info("medRxiv: %d preprints entre %s e %s", len(papers), inicio, fim)
+            if total is not None and cursor + POR_PAGINA >= total:
+                break
+            if total is None and len(atual) < POR_PAGINA:
+                break
+        else:
+            logger.warning(
+                "medRxiv: a janela %s a %s tem %s preprints; coletados só %d (max_paginas=%d)",
+                inicio,
+                fim,
+                total if total is not None else "mais de",
+                len(papers),
+                max_paginas,
+            )
+        logger.info(
+            "medRxiv: %d de %s preprints entre %s e %s",
+            len(papers),
+            total if total is not None else "?",
+            inicio,
+            fim,
+        )
         return papers
 
     def _exigir_client(self) -> httpx.AsyncClient:

@@ -23,8 +23,6 @@ class Config(BaseSettings):
     pubmed_api_key: str = Field(default="")
     duckdb_path: Path = Field(default=Path("./data/papers.duckdb"))
     topicos_path: Path = Field(default=Path("./config/topicos.yaml"))
-    # Horário fixo: este é o mais pesado, então fecha a fila de madrugada.
-    sync_hora_local: str = Field(default="04:10", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     log_level: str = Field(default="INFO")
 
 

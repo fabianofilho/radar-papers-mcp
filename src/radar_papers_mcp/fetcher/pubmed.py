@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
+from typing import Any
 from xml.etree import ElementTree
 
 import httpx
@@ -20,6 +21,11 @@ logger = logging.getLogger(__name__)
 BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 FONTE = "pubmed"
 USER_AGENT = "radar-papers-mcp/0.1 (+https://github.com/fabianofilho/radar-papers-mcp)"
+# Tamanho da página do esearch e do lote do efetch.
+POR_PAGINA = 200
+# Teto de IDs por query e por sync. Acima disso a query está larga demais para
+# um radar diário, e o sync avisa no log em vez de truncar em silêncio.
+MAX_IDS = 1000
 
 _MESES = {
     "jan": 1,
@@ -48,7 +54,29 @@ def _texto(elemento: ElementTree.Element | None) -> str | None:
     return texto or None
 
 
+def _data_do_no(no: ElementTree.Element) -> date | None:
+    ano = _texto(no.find("Year"))
+    if not ano:
+        return None
+    mes_bruto = (_texto(no.find("Month")) or "1").lower()
+    mes = _MESES.get(mes_bruto[:3], None)
+    if mes is None:
+        try:
+            mes = int(mes_bruto)
+        except ValueError:
+            mes = 1
+    dia = _texto(no.find("Day")) or "1"
+    try:
+        return date(int(ano), mes, int(dia))
+    except ValueError:
+        return None
+
+
 def _data(artigo: ElementTree.Element) -> date | None:
+    """Data da edição da revista, só para exibição.
+
+    Quando a revista informa só ano ou ano e mês, o dia e o mês faltantes viram 1.
+    """
     for caminho in (
         "./MedlineCitation/Article/Journal/JournalIssue/PubDate",
         "./PubmedData/History/PubMedPubDate",
@@ -56,21 +84,21 @@ def _data(artigo: ElementTree.Element) -> date | None:
         no = artigo.find(caminho)
         if no is None:
             continue
-        ano = _texto(no.find("Year"))
-        if not ano:
+        data = _data_do_no(no)
+        if data is not None:
+            return data
+    return None
+
+
+def _data_entrada(artigo: ElementTree.Element) -> date | None:
+    """Data em que o paper entrou no PubMed (Entrez), a mesma do filtro ``edat``."""
+    for status in ("entrez", "pubmed"):
+        no = artigo.find(f"./PubmedData/History/PubMedPubDate[@PubStatus='{status}']")
+        if no is None:
             continue
-        mes_bruto = (_texto(no.find("Month")) or "1").lower()
-        mes = _MESES.get(mes_bruto[:3], None)
-        if mes is None:
-            try:
-                mes = int(mes_bruto)
-            except ValueError:
-                mes = 1
-        dia = _texto(no.find("Day")) or "1"
-        try:
-            return date(int(ano), mes, int(dia))
-        except ValueError:
-            continue
+        data = _data_do_no(no)
+        if data is not None:
+            return data
     return None
 
 
@@ -113,6 +141,7 @@ def parse_efetch(xml: str) -> list[Paper]:
                 data_publicacao=_data(artigo),
                 abstract=" ".join(p for p in abstract_partes if p) or None,
                 url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
+                data_entrada=_data_entrada(artigo),
             )
         )
     return papers
@@ -148,8 +177,9 @@ class PubMed:
             params["api_key"] = self._api_key
         return params
 
-    async def buscar_ids(self, query: str, *, dias: int, retmax: int = 50) -> list[str]:
-        """IDs dos papers do período que casam com a query."""
+    async def _esearch(
+        self, query: str, *, dias: int, retstart: int, retmax: int
+    ) -> dict[str, Any]:
         await self._limitador.esperar()
         resposta = await self._exigir_client().get(
             f"{BASE}/esearch.fcgi",
@@ -157,8 +187,12 @@ class PubMed:
                 {
                     "term": query,
                     "retmode": "json",
+                    "retstart": str(retstart),
                     "retmax": str(retmax),
-                    "datetype": "pdat",
+                    # edat: data de entrada no PubMed (Entrez). É a mesma data que a
+                    # busca usa para decidir o que é novo; a data da edição (pdat)
+                    # pode estar meses antes ou depois.
+                    "datetype": "edat",
                     "reldate": str(dias),
                     "sort": "date",
                 }
@@ -168,22 +202,54 @@ class PubMed:
         corpo = resposta.json()
         if "esearchresult" not in corpo:
             raise PubMedIndisponivel(f"esearch devolveu algo inesperado: {str(corpo)[:120]}")
-        return list(corpo["esearchresult"].get("idlist", []))
+        return dict(corpo["esearchresult"])
+
+    async def buscar_ids(self, query: str, *, dias: int, max_ids: int = MAX_IDS) -> list[str]:
+        """IDs dos papers que entraram no PubMed no período e casam com a query.
+
+        Pagina até o ``count`` do esearch. Se passar de ``max_ids``, para ali e
+        registra um aviso no log.
+        """
+        ids: list[str] = []
+        while True:
+            resultado = await self._esearch(
+                query,
+                dias=dias,
+                retstart=len(ids),
+                retmax=min(POR_PAGINA, max_ids - len(ids)),
+            )
+            pagina = [str(i) for i in resultado.get("idlist", [])]
+            ids.extend(pagina)
+            total = int(resultado.get("count", 0) or 0)
+            if not pagina or len(ids) >= total:
+                break
+            if len(ids) >= max_ids:
+                logger.warning(
+                    "PubMed: a query %r tem %d papers no período; coletados só %d (max_ids). "
+                    "Estreite a query ou reduza a janela.",
+                    query,
+                    total,
+                    len(ids),
+                )
+                break
+        return ids
 
     async def detalhes(self, ids: list[str]) -> list[Paper]:
-        """Detalhe dos papers, em um único efetch."""
-        if not ids:
-            return []
-        await self._limitador.esperar()
-        resposta = await self._exigir_client().get(
-            f"{BASE}/efetch.fcgi",
-            params=self._params({"id": ",".join(ids), "retmode": "xml"}),
-        )
-        resposta.raise_for_status()
-        return parse_efetch(resposta.text)
+        """Detalhe dos papers, em lotes de ``POR_PAGINA`` por efetch."""
+        papers: list[Paper] = []
+        for inicio in range(0, len(ids), POR_PAGINA):
+            lote = ids[inicio : inicio + POR_PAGINA]
+            await self._limitador.esperar()
+            resposta = await self._exigir_client().get(
+                f"{BASE}/efetch.fcgi",
+                params=self._params({"id": ",".join(lote), "retmode": "xml"}),
+            )
+            resposta.raise_for_status()
+            papers.extend(parse_efetch(resposta.text))
+        return papers
 
-    async def buscar(self, query: str, *, dias: int, retmax: int = 50) -> list[Paper]:
-        return await self.detalhes(await self.buscar_ids(query, dias=dias, retmax=retmax))
+    async def buscar(self, query: str, *, dias: int, max_ids: int = MAX_IDS) -> list[Paper]:
+        return await self.detalhes(await self.buscar_ids(query, dias=dias, max_ids=max_ids))
 
     def _exigir_client(self) -> httpx.AsyncClient:
         if self._client is None:

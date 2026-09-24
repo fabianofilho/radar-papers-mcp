@@ -10,8 +10,13 @@ import respx
 
 from radar_papers_mcp.fetcher.base import Paper
 from radar_papers_mcp.llm.qwen_client import QwenClient
-from radar_papers_mcp.llm.resumir import AbstractAusente, resumir
-from radar_papers_mcp.mcp_server.tools.papers import buscar_papers_novos, resumir_paper
+from radar_papers_mcp.llm.resumir import AbstractAusente, renderizar_prompt, resumir
+from radar_papers_mcp.mcp_server.tools.papers import (
+    AVISO_BASE_TRAVADA,
+    buscar_papers_novos,
+    resolver_topico,
+    resumir_paper,
+)
 from radar_papers_mcp.store.db import conectar
 from radar_papers_mcp.store.queries import gravar
 
@@ -69,7 +74,100 @@ async def test_dias_invalido(caminho_db: str) -> None:
     assert resposta.aviso is not None
 
 
+# --- L3: limites, truncamento e erros ------------------------------------------
+
+
+async def test_dias_acima_do_teto_avisa_sem_culpar_o_sync(caminho_db: str) -> None:
+    with conectar(caminho_db) as conexao:
+        gravar(conexao, [_paper()], "calibração")
+    resposta = await buscar_papers_novos(None, 100_000_000, caminho_db=caminho_db)
+    assert resposta.total == 0
+    assert resposta.aviso is not None and "365" in resposta.aviso
+    assert resposta.aviso != AVISO_BASE_TRAVADA
+
+
+async def test_limite_invalido(caminho_db: str) -> None:
+    resposta = await buscar_papers_novos(None, 7, caminho_db=caminho_db, limite=0)
+    assert resposta.aviso is not None and "limite" in resposta.aviso
+
+
+async def test_truncamento_e_avisado_e_total_conta_tudo(caminho_db: str) -> None:
+    with conectar(caminho_db) as conexao:
+        gravar(conexao, [_paper(doi=f"10.1/{i}") for i in range(7)], "calibração")
+    resposta = await buscar_papers_novos(None, 7, caminho_db=caminho_db, limite=5)
+    assert len(resposta.resultados) == 5
+    assert resposta.total == 7
+    assert resposta.aviso is not None and "5 mais recentes de 7" in resposta.aviso
+
+
+async def test_erro_inesperado_nao_vira_aviso_de_sync(
+    caminho_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from radar_papers_mcp.mcp_server.tools import papers as modulo
+
+    with conectar(caminho_db) as conexao:
+        gravar(conexao, [_paper()], "calibração")
+
+    def quebra(*_a: object, **_k: object) -> None:
+        raise OverflowError("date value out of range")
+
+    monkeypatch.setattr(modulo, "papers_do_periodo", quebra)
+    resposta = await buscar_papers_novos(None, 7, caminho_db=caminho_db)
+    assert resposta.aviso is not None
+    assert "OverflowError" in resposta.aviso
+    assert "sync" not in resposta.aviso
+
+
+# --- N2: tópico sem acento, sem caixa, com lista dos válidos --------------------
+
+TOPICOS = ["calibração de modelos clínicos", "fairness em IA médica", "multicalibração"]
+
+
+def test_resolver_topico() -> None:
+    assert resolver_topico("Fairness", TOPICOS) == ["fairness em IA médica"]
+    assert resolver_topico("calibracao", TOPICOS) == ["calibração de modelos clínicos"]
+    assert resolver_topico("MULTICALIBRAÇÃO", TOPICOS) == ["multicalibração"]
+    assert resolver_topico("calibration", TOPICOS) == []
+    assert resolver_topico("   ", TOPICOS) == []
+
+
+async def test_busca_por_topico_normalizado(caminho_db: str) -> None:
+    with conectar(caminho_db) as conexao:
+        gravar(conexao, [_paper()], "calibração de modelos clínicos")
+        gravar(conexao, [_paper(doi="10.1/multi")], "multicalibração")
+    resposta = await buscar_papers_novos("Calibracao", 7, caminho_db=caminho_db)
+    assert resposta.topico == "calibração de modelos clínicos"
+    assert [r.chave for r in resposta.resultados] == ["10.1101/abc"]
+
+
+async def test_topico_desconhecido_lista_os_validos(caminho_db: str) -> None:
+    with conectar(caminho_db) as conexao:
+        gravar(conexao, [_paper()], "calibração de modelos clínicos")
+        gravar(conexao, [_paper(doi="10.1/f")], "fairness em IA médica")
+    resposta = await buscar_papers_novos("calibration", 7, caminho_db=caminho_db)
+    assert resposta.total == 0
+    assert resposta.aviso is not None
+    assert "calibração de modelos clínicos" in resposta.aviso
+    assert "fairness em IA médica" in resposta.aviso
+
+
+async def test_topico_configurado_sem_papers_nao_e_desconhecido(caminho_db: str) -> None:
+    with conectar(caminho_db) as conexao:
+        gravar(conexao, [_paper()], "calibração de modelos clínicos")
+    resposta = await buscar_papers_novos(
+        "multicalibracao", 7, caminho_db=caminho_db, topicos_configurados=TOPICOS
+    )
+    assert resposta.topico == "multicalibração"
+    assert resposta.total == 0
+    assert resposta.aviso == "Nenhum paper novo no período para esse tópico."
+
+
 # --- resumo ----------------------------------------------------------------
+
+
+def test_prompt_vem_de_dentro_do_pacote() -> None:
+    """O template é lido via importlib.resources, não de um caminho do checkout."""
+    assert "SOMENTE com JSON" in renderizar_prompt()
 
 
 async def test_sem_abstract_nao_inventa_resumo() -> None:

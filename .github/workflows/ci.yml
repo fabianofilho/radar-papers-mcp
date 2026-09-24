@@ -30,3 +30,10 @@ jobs:
 
       - name: Testes
         run: uv run pytest -q
+
+      - name: Wheel instalado renderiza o prompt
+        run: |
+          uv build --wheel -o dist
+          uv venv /tmp/wheel-venv --python 3.12
+          uv pip install --python /tmp/wheel-venv/bin/python dist/*.whl
+          cd /tmp && /tmp/wheel-venv/bin/python -c "from radar_papers_mcp.llm.resumir import renderizar_prompt; assert 'JSON' in renderizar_prompt()"
