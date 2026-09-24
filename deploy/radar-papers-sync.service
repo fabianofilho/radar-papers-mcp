@@ -5,8 +5,11 @@
 [Unit]
 Description=Busca papers novos no PubMed e medRxiv
 Documentation=https://github.com/fabianofilho/radar-papers-mcp
-# Sem rede, o sync falha e o timer tenta de novo no dia seguinte.
+# Se qualquer fonte falha (sem rede, API fora do ar), papers-cli sync grava o que
+# as outras trouxeram e sai com código 1: o systemd marca a unit como failed,
+# dispara o alerta abaixo e o timer tenta de novo no dia seguinte.
 After=network-online.target
+OnFailure=radar-papers-sync-falha.service
 
 [Service]
 Type=oneshot

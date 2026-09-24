@@ -21,7 +21,8 @@ Primeira versão pública.
   termos do medRxiv (filtro local).
 - Base DuckDB local, deduplicada por DOI, com acúmulo de tópicos por paper.
 - Limitador de taxa da NCBI (3 req/s sem chave, 10 com chave) e User-Agent identificado.
-- Units systemd do sync diário em `deploy/`.
+- Units systemd do sync diário em `deploy/`, com `OnFailure` que alerta no journal (e por
+  `notify-send`, se houver) quando o sync falha.
 
 ### Mudou nesta versão
 
@@ -38,6 +39,9 @@ Primeira versão pública.
   ao atingir o teto. Antes parava em 50 IDs e 500 preprints sem avisar.
 - O prompt do resumo foi para dentro do pacote e é lido com `importlib.resources`; a
   instalação por wheel deixou de quebrar o `resumir_paper`.
+- `papers-cli sync` sai com código 1 quando alguma fonte falha, depois de gravar o que
+  as outras trouxeram. Antes a falha virava só um warning e o sync terminava com 0, então
+  o systemd registrava sucesso num dia sem rede.
 - O agendador interno (APScheduler, `SYNC_HORA_LOCAL`) foi removido: o agendamento oficial
   é o timer systemd de `deploy/`.
 - Dependência `mcp>=2.2,<3`, que é a série que tem `mcp.server.mcpserver`.

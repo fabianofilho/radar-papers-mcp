@@ -70,11 +70,24 @@ As units supõem o repositório em `~/radar-papers-mcp` e o uv em `~/.local/bin/
 diferente, ajuste `WorkingDirectory` e `ExecStart` antes de instalar.
 
 ```bash
-cp deploy/radar-papers-sync.service deploy/radar-papers-sync.timer ~/.config/systemd/user/
+cp deploy/radar-papers-sync.service deploy/radar-papers-sync.timer \
+   deploy/radar-papers-sync-falha.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now radar-papers-sync.timer
 systemctl --user list-timers radar-papers-sync.timer   # próxima execução
 journalctl --user -u radar-papers-sync.service          # log dos syncs
+```
+
+Falha não passa em silêncio: se o PubMed (em qualquer tópico) ou o medRxiv falhar,
+`papers-cli sync` grava o que as outras fontes trouxeram, lista as falhas no stderr e sai
+com código 1. O systemd marca a unit como `failed` e o `OnFailure` roda
+`radar-papers-sync-falha.service`, que grava uma linha com prioridade `err` no journal e,
+se houver `notify-send`, mostra uma notificação. Para ser avisado por outro canal, troque
+o `ExecStart` dessa unit. Para ver falhas recentes:
+
+```bash
+systemctl --user status radar-papers-sync.service
+journalctl --user -t radar-papers-sync -p err
 ```
 
 Sem o timer, rode `papers-cli sync` à mão ou pelo agendador que preferir; o servidor não

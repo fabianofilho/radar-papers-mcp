@@ -1,0 +1,11 @@
+# Alerta de falha do sync do radar-papers-mcp, disparado pelo OnFailure de
+# radar-papers-sync.service. Grava uma linha com prioridade err no journal e, se
+# houver sessão gráfica com notify-send, mostra uma notificação na tela.
+# Para outro canal (email, ntfy, webhook), troque o ExecStart.
+[Unit]
+Description=Avisa que o sync do radar-papers-mcp falhou
+Documentation=https://github.com/fabianofilho/radar-papers-mcp
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'echo "radar-papers-sync falhou; veja journalctl --user -u radar-papers-sync.service" | systemd-cat -t radar-papers-sync -p err; if command -v notify-send >/dev/null 2>&1; then notify-send -u critical "radar-papers-mcp" "O sync diario falhou. Veja journalctl --user -u radar-papers-sync.service" || true; fi'
