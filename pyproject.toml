@@ -3,6 +3,8 @@ name = "radar-papers-mcp"
 version = "0.1.0"
 description = "Servidor MCP que monitora PubMed e medRxiv por tópicos de pesquisa e resume papers com LLM local"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "mcp>=2.2,<3",

@@ -10,3 +10,5 @@ __pycache__/
 *.duckdb.wal
 data/
 !src/radar_papers_mcp/
+dist/
+.claude/
