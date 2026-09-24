@@ -39,7 +39,6 @@ cp .env.example .env
 | `PUBMED_API_KEY` | vazio | [chave gratuita da NCBI](https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/) |
 | `DUCKDB_PATH` | `./data/papers.duckdb` | base local |
 | `TOPICOS_PATH` | `./config/topicos.yaml` | tópicos monitorados |
-| `SYNC_HORA_LOCAL` | `04:10` | horário fixo do sync agendado |
 
 Os tópicos ficam em `config/topicos.yaml`. Cada um tem **duas** configurações, porque as
 fontes funcionam de forma diferente:
@@ -60,6 +59,39 @@ uv run papers-cli buscar "multicalibração"
 uv run papers-cli resumir "10.1016/j.exemplo.2026.100217"
 ```
 
+### Sync agendado
+
+O servidor MCP só lê a base; quem a alimenta é `papers-cli sync`. O agendamento oficial é
+um timer systemd de usuário, versionado em [`deploy/`](deploy/): roda todo dia às 04:10,
+com atraso aleatório de até 30 minutos (para várias máquinas não baterem nas APIs públicas
+no mesmo minuto) e `Persistent=true` (se a máquina estava desligada, roda ao ligar).
+
+As units supõem o repositório em `~/radar-papers-mcp` e o uv em `~/.local/bin/uv`. Se for
+diferente, ajuste `WorkingDirectory` e `ExecStart` antes de instalar.
+
+```bash
+cp deploy/radar-papers-sync.service deploy/radar-papers-sync.timer ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now radar-papers-sync.timer
+systemctl --user list-timers radar-papers-sync.timer   # próxima execução
+journalctl --user -u radar-papers-sync.service          # log dos syncs
+```
+
+Sem o timer, rode `papers-cli sync` à mão ou pelo agendador que preferir; o servidor não
+agenda nada sozinho.
+
+### Atualizando uma base criada antes do schema 2
+
+A versão atual decide o que é "novo" pela data de entrada na fonte (coluna
+`data_entrada`). Uma base antiga é migrada sozinha na primeira conexão de escrita (o
+próximo sync, por exemplo). Na migração, a data de entrada do PubMed é aproximada pelo
+dia da última coleta; para gravar a data Entrez real dos papers que já estavam na base,
+rode uma vez:
+
+```bash
+uv run papers-cli corrigir-datas
+```
+
 ### Ligando ao Claude Code
 
 ```bash
@@ -73,15 +105,29 @@ claude mcp add radar-papers --scope user \
 
 ## Uso
 
-### `buscar_papers_novos(topico="", dias=7)`
+### `buscar_papers_novos(topico="", dias=7, limite=50)`
 
-Papers do período na base local, com a chave para usar no resumo e o link original.
+Papers que entraram no PubMed ou no medRxiv nos últimos `dias`, lidos da base local, com
+a chave para usar no resumo e o link original.
+
+- **"Novo" é pela data de entrada na fonte** (`data_entrada`: Entrez no PubMed, postagem
+  no medRxiv), não pela data da edição da revista (`data_publicacao`, só para exibição).
+  A edição pode estar meses antes ou depois da entrada, e muitas revistas informam só o
+  ano ou o mês.
+- `topico` é o nome de um tópico configurado. Caixa e acento não importam, e basta um
+  trecho com palavras inteiras do nome (`fairness`, `calibracao`). A comparação é por
+  palavra inteira: `calibração` não traz `multicalibração`. Se o pedido não corresponder a
+  um único tópico, a resposta vem vazia com a lista dos tópicos válidos em `aviso`.
+- `dias` vai de 1 a 365 e `limite` de 1 a 200. Os mais recentes vêm primeiro.
+- `total` conta todos os papers do período, mesmo os que ficaram além do `limite`; nesse
+  caso `aviso` diz quantos foram omitidos.
 
 ### `resumir_paper(paper_id: str)`
 
 ```json
 {
-  "titulo": "Mortality risk ranking after medical emergency team review…",
+  "chave": "pubmed:42761253",
+  "titulo": "Mortality risk ranking after medical emergency team review...",
   "url": "https://pubmed.ncbi.nlm.nih.gov/42761253/",
   "origem": "llm",
   "resumo": {
@@ -89,11 +135,14 @@ Papers do período na base local, com a chave para usar no resumo e o link origi
     "metodo": "Coorte multicêntrica em quatro hospitais, 1.937 adultos.",
     "achado_principal": "O modelo original discriminou bem (AUC 0,80) mas com estimativas variáveis entre hospitais; o novo modelo chegou a AUC 0,84 com menos variáveis.",
     "relevancia": "Mostra que a discriminação pode ser robusta mesmo quando a calibração absoluta varia entre instituições."
-  }
+  },
+  "aviso": "O resumo é gerado por LLM local a partir do abstract, não do texto completo. Sempre confira no link original antes de citar."
 }
 ```
 
-Esse é um retorno real. O resumo fica cacheado: o mesmo paper não é resumido duas vezes.
+O conteúdo do resumo é de um retorno real (a `chave` acima é ilustrativa). O resumo fica
+cacheado: o mesmo paper não é resumido duas vezes. Sem abstract, ou com o LLM fora do ar,
+`resumo` vem nulo, `origem` vem `indisponivel` e `aviso` explica o motivo.
 
 ## As duas fontes
 
@@ -101,6 +150,10 @@ Esse é um retorno real. O resumo fica cacheado: o mesmo paper não é resumido 
 | --- | --- | --- |
 | PubMed | E-utilities (`esearch` + `efetch`) | **3 req/s sem chave, 10 com chave** |
 | medRxiv | `api.medrxiv.org/details` | sem busca por termo; paginado de 100 em 100 |
+
+O sync pagina as duas fontes até o fim: o PubMed até o `count` do esearch (teto de 1000
+IDs por tópico) e o medRxiv até o total da janela (teto de 100 páginas, 10 mil preprints).
+Se um teto for atingido, o log do sync registra um aviso com o total da fonte.
 
 O rate limit da NCBI é aplicado de verdade, a primeira tentativa de teste deste projeto
 recebeu `{"error": "API rate limit exceeded"}`. O fetcher espaça as requisições conforme a
@@ -122,8 +175,18 @@ segunda linha.
 resumo gerado a partir do título. Resumir texto vazio produz exatamente o tipo de invenção
 plausível que torna a ferramenta inútil para pesquisa.
 
-**A janela do medRxiv custa caro.** Uma janela larga traz milhares de preprints que serão
-descartados no filtro local. O padrão é limitado a 5 páginas (500 preprints) por execução.
+**A janela do medRxiv custa caro.** Uma semana do medRxiv tem por volta de mil preprints, e
+o sync baixa todos para filtrar localmente (cerca de 10 requisições). Um backfill largo
+(`sync --dias 90`) baixa muito mais; acima de 10 mil preprints na janela, o que passar do
+teto fica de fora e o log avisa.
+
+**O filtro do medRxiv privilegia a cobertura, não a precisão.** Um preprint casa com o
+tópico quando qualquer termo da lista aparece como trecho do título ou do abstract. Isso é
+intencional, para não perder preprint relevante, mas traz ruído: no tópico de calibração
+aparecem preprints que falam de calibrar um instrumento ou um modelo econômico, sem relação
+com modelo clínico. A triagem fica com você (ou com o `resumir_paper`, cujo campo
+`relevancia` diz quando o paper só tangencia o tópico). Para reduzir o ruído, use termos
+mais específicos no YAML.
 
 **A query do PubMed é sua responsabilidade.** Uma query mal formada devolve zero sem erro.
 Teste no [PubMed](https://pubmed.ncbi.nlm.nih.gov/) antes de colocar no YAML, na prática,

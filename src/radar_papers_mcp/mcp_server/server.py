@@ -46,8 +46,9 @@ async def resumir_paper(paper_id: str) -> RespostaResumo:
     """Resumo estruturado de um paper: problema, método, achado e relevância.
 
     O resumo vem do abstract, não do texto completo, e é gerado pelo LLM local.
-    Fica cacheado: o mesmo paper não é resumido duas vezes. Papers sem abstract
-    devolvem erro claro em vez de um resumo inventado.
+    Fica cacheado: o mesmo paper não é resumido duas vezes. Sem abstract, ou com
+    o LLM fora do ar, resumo vem nulo, origem vem "indisponivel" e o aviso diz o
+    motivo, em vez de um resumo inventado.
 
     Args:
         paper_id: a chave devolvida por buscar_papers_novos (o DOI, em geral).

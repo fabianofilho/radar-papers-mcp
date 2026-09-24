@@ -3,6 +3,9 @@
 # PubMed usa a sintaxe das E-utilities (campos entre colchetes, AND/OR/NOT).
 # medRxiv não tem busca por termo na API: o filtro é feito localmente sobre
 # título e abstract dos preprints do período, então liste palavras simples.
+# Qualquer termo que apareça como trecho do texto já casa. Isso privilegia a
+# cobertura e traz ruído (ex.: "calibration" de instrumento de laboratório);
+# termos mais específicos reduzem o ruído ao custo de perder preprints.
 
 topicos:
   - nome: calibração de modelos clínicos
