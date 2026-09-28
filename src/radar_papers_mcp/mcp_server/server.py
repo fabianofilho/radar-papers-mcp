@@ -8,6 +8,7 @@ import sys
 from mcp.server.mcpserver import MCPServer
 
 from radar_papers_mcp.config import TopicosInvalidos, carregar_config, carregar_topicos
+from radar_papers_mcp.mcp_server.capacidades import esconder_o_que_nao_existe
 from radar_papers_mcp.mcp_server.tools.papers import RespostaBusca, RespostaResumo
 from radar_papers_mcp.mcp_server.tools.papers import buscar_papers_novos as _buscar_papers_novos
 from radar_papers_mcp.mcp_server.tools.papers import resumir_paper as _resumir_paper
@@ -74,6 +75,9 @@ async def resumir_paper(paper_id: str) -> RespostaResumo:
 
 def main() -> None:
     """Sobe o servidor MCP no stdio."""
+    # Este servidor so tem tools. Anunciar prompts e resources faria quem
+    # mapeia o servidor gastar chamadas para descobrir lista vazia.
+    esconder_o_que_nao_existe(mcp)
     config = carregar_config()
     logging.basicConfig(
         level=getattr(logging, config.log_level.upper(), logging.INFO),
