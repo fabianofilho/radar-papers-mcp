@@ -65,7 +65,20 @@ class PaperEncontrado(BaseModel):
 class RespostaBusca(BaseModel):
     topico: str | None
     dias: int
-    total: int = Field(description="Quantos papers o período tem, mesmo além do limite")
+    total: int = Field(
+        description=(
+            "Quantos papers o período tem na base, mesmo além do limite. Não é o "
+            "tamanho desta lista: não conte os resultados para dizer quantos saíram "
+            "no período."
+        )
+    )
+    retornados: int = Field(
+        default=0, description="Quantos vieram em 'resultados', no máximo 'limite'"
+    )
+    truncado: bool = Field(
+        default=False,
+        description="True quando total > retornados: há papers no período que não vieram",
+    )
     resultados: list[PaperEncontrado]
     aviso: str | None = None
 
@@ -195,6 +208,8 @@ async def buscar_papers_novos(
         topico=nome,
         dias=dias,
         total=total,
+        retornados=len(linhas),
+        truncado=total > len(linhas),
         resultados=[_para_modelo(linha) for linha in linhas],
         aviso=aviso,
     )
