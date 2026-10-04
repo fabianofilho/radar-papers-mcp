@@ -116,6 +116,59 @@ claude mcp add radar-papers --scope user \
   -- uv --directory /caminho/para/radar-papers-mcp run radar-papers-mcp
 ```
 
+### Modo connector (servidor HTTP)
+
+Por padrão o servidor fala **stdio**: o cliente sobe o processo na máquina de quem usa.
+Com `TRANSPORTE=streamable-http`, ele vira um servidor alcançável pela rede, que é o que
+o Claude aceita como custom connector.
+
+```bash
+TRANSPORTE=streamable-http HTTP_PORTA=8000 uv run radar-papers-mcp
+```
+
+| Variável | Padrão | Observação |
+| --- | --- | --- |
+| `TRANSPORTE` | `stdio` | `streamable-http` liga o modo connector |
+| `HTTP_HOST` / `HTTP_PORTA` / `HTTP_PATH` | `127.0.0.1` / `8000` / `/mcp` | |
+| `HTTP_STATELESS` | `true` | cada requisição independente; escala melhor |
+| `HTTP_LIMITE_GLOBAL_POR_MINUTO` | `1200` | o teto que protege a máquina |
+| `HTTP_LIMITE_POR_MINUTO` | `600` | por origem, contra chamada direta |
+| `HTTP_HOSTS_PUBLICOS` | vazio | nomes públicos aceitos no `Host`, separados por vírgula |
+
+**O que muda no modo connector.** O servidor só lê a base e **não chama o LLM**:
+
+- `buscar_papers_novos` funciona igual.
+- `resumir_paper` devolve apenas o resumo que já estiver em cache (`origem: "cache"`).
+  Sem cache, `resumo` vem nulo, `origem` vem `indisponivel` e `aviso` diz que não há
+  resumo e que este servidor não gera resumos sob demanda. Nada é inventado e nada é
+  gravado. Paper sem abstract continua sem resumo, com o aviso de sempre.
+
+Os motivos: resumir sob demanda gastaria inferência de quem hospeda a cada chamada de
+qualquer usuário, e gravar o cache exigiria escrever no arquivo que o próprio servidor lê
+(o DuckDB recusa um escritor com leitor aberto). O cache é preenchido fora do servidor,
+com `papers-cli resumir` ou pelo servidor em stdio.
+
+**Por que dois limites.** Quando o Claude chama um connector remoto, as requisições chegam
+dos **IPs da Anthropic**, não do usuário final. Limitar só por IP colocaria todos os
+usuários no mesmo balde. O teto global é o que vale para esse tráfego; o por origem serve
+contra quem chama o servidor direto. Atrás de proxy local, a origem vem da entrada mais à
+direita do `X-Forwarded-For`, e o cabeçalho só é aceito quando o socket é loopback.
+
+**Atrás de um proxy ou túnel, declare o nome público.** O SDK do MCP valida o cabeçalho
+`Host` e responde **421 Invalid Host** ao que não reconhece (proteção contra DNS
+rebinding). Atrás de um túnel o `Host` que chega é o nome público, então ele precisa
+constar em `HTTP_HOSTS_PUBLICOS`. O loopback continua valendo junto.
+
+A unit [`deploy/radar-papers-connector.service`](deploy/radar-papers-connector.service)
+sobe o servidor em `127.0.0.1:8103`, só leitura. Quem expõe para fora é a camada da frente
+(proxy com TLS ou túnel).
+
+**Durante o sync o connector fica sem base.** `papers-cli sync` grava direto na base e
+segura a escrita enquanto busca nas fontes (minutos, às vezes mais). Nesse intervalo as
+tools respondem com o aviso de que a base não pôde ser lida, em vez de erro. Se um sync
+começar no exato instante de uma leitura, ele falha, o `OnFailure` avisa e o timer tenta
+de novo no dia seguinte.
+
 ## Uso
 
 ### `buscar_papers_novos(topico="", dias=7, limite=50)`
@@ -155,7 +208,9 @@ a chave para usar no resumo e o link original.
 
 O conteúdo do resumo é de um retorno real (a `chave` acima é ilustrativa). O resumo fica
 cacheado: o mesmo paper não é resumido duas vezes. Sem abstract, ou com o LLM fora do ar,
-`resumo` vem nulo, `origem` vem `indisponivel` e `aviso` explica o motivo.
+`resumo` vem nulo, `origem` vem `indisponivel` e `aviso` explica o motivo. No modo
+connector o LLM não é chamado: só vem resumo que já estiver em cache (veja "Modo
+connector").
 
 ## As duas fontes
 

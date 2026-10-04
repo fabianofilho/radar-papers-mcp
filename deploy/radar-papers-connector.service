@@ -1,0 +1,45 @@
+# Servidor MCP do radar de papers em HTTP, para hospedar como connector.
+#
+# Escuta só no loopback de propósito. Quem publica para fora é a camada da
+# frente (proxy reverso com TLS, ou Tailscale Funnel), que aponta para esta
+# porta. Assim a decisão de expor fica num lugar só, e não espalhada em
+# variável de ambiente.
+#
+# Instalar como serviço de usuário:
+#   cp deploy/radar-papers-connector.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now radar-papers-connector
+#
+# Este processo só lê a base e não chama o LLM: resumir_paper devolve apenas o
+# que já está em cache. A coleta NÃO roda aqui: ela é radar-papers-sync.service
+# (disparada por radar-papers-sync.timer), que hoje grava direto na base. Enquanto
+# o sync segura a escrita, as tools respondem com o aviso de base em sync, em vez
+# de erro.
+
+[Unit]
+Description=Servidor MCP do radar de papers em HTTP (modo connector)
+Documentation=https://github.com/fabianofilho/radar-papers-mcp
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/radar-papers-mcp
+Environment=TRANSPORTE=streamable-http
+Environment=HTTP_HOST=127.0.0.1
+Environment=HTTP_PORTA=8103
+Environment=HTTP_PATH=/mcp
+Environment=HTTP_STATELESS=true
+# Nome público pelo qual o túnel ou proxy chama este servidor. Sem ele, o SDK
+# responde 421 (Invalid Host) a tudo que vier de fora, por proteção contra DNS
+# rebinding. Vários nomes separados por vírgula.
+Environment=HTTP_HOSTS_PUBLICOS=debian-f.tailf42a96.ts.net
+ExecStart=%h/.local/bin/uv --directory %h/radar-papers-mcp run radar-papers-mcp
+Restart=always
+RestartSec=5
+ProtectSystem=strict
+ReadWritePaths=%h/radar-papers-mcp/data
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
