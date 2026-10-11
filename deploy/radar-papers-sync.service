@@ -14,7 +14,7 @@ OnFailure=radar-papers-sync-falha.service
 [Service]
 Type=oneshot
 WorkingDirectory=%h/radar-papers-mcp
-ExecStart=%h/.local/bin/uv --directory %h/radar-papers-mcp run papers-cli sync
+ExecStart=%h/.local/bin/uv --directory %h/radar-papers-mcp run papers-cli sync --publicar
 # O sync pagina a janela inteira do medRxiv (por volta de mil preprints por
 # semana) e respeita o rate limit da NCBI; numa rede ruim pode demorar.
 TimeoutStartSec=3600

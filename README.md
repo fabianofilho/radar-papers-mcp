@@ -62,9 +62,10 @@ uv run papers-cli resumir "10.1016/j.exemplo.2026.100217"
 ### Sync agendado
 
 O servidor MCP só lê a base; quem a alimenta é `papers-cli sync`. O agendamento oficial é
-um timer systemd de usuário, versionado em [`deploy/`](deploy/): roda todo dia às 04:10,
-com atraso aleatório de até 30 minutos (para várias máquinas não baterem nas APIs públicas
-no mesmo minuto) e `Persistent=true` (se a máquina estava desligada, roda ao ligar).
+um timer systemd de usuário, versionado em [`deploy/`](deploy/): roda `sync --publicar`
+todo dia às 04:10, com atraso aleatório de até 30 minutos (para várias máquinas não
+baterem nas APIs públicas no mesmo minuto) e `Persistent=true` (se a máquina estava
+desligada, roda ao ligar).
 
 As units supõem o repositório em `~/radar-papers-mcp` e o uv em `~/.local/bin/uv`. Se for
 diferente, ajuste `WorkingDirectory` e `ExecStart` antes de instalar.
@@ -163,11 +164,14 @@ A unit [`deploy/radar-papers-connector.service`](deploy/radar-papers-connector.s
 sobe o servidor em `127.0.0.1:8103`, só leitura. Quem expõe para fora é a camada da frente
 (proxy com TLS ou túnel).
 
-**Durante o sync o connector fica sem base.** `papers-cli sync` grava direto na base e
-segura a escrita enquanto busca nas fontes (minutos, às vezes mais). Nesse intervalo as
-tools respondem com o aviso de que a base não pôde ser lida, em vez de erro. Se um sync
-começar no exato instante de uma leitura, ele falha, o `OnFailure` avisa e o timer tenta
-de novo no dia seguinte.
+**O sync não interrompe quem está lendo.** `papers-cli sync --publicar` constrói a base
+nova ao lado e troca as duas por rename no fim: quem já abriu continua no arquivo antigo
+até fechar, quem abrir depois pega o novo. É o modo que o timer usa. Sem `--publicar`, o
+sync grava direto na base e segura a escrita enquanto busca nas fontes, e nesse intervalo
+as tools respondem com o aviso de que a base não pôde ser lida. A troca também serve ao
+tamanho: o DuckDB não devolve o espaço das páginas antigas, e o upsert diário dos papers
+já conhecidos levou o arquivo a 9,3 MB contra 3,5 MB compactado em 11/10/2026. A base nova
+é clonada da servida com `COPY FROM DATABASE`, e a cópia já sai compactada.
 
 ## Uso
 
