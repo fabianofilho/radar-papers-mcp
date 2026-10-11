@@ -34,6 +34,13 @@ AVISO_RESUMO = (
     "O resumo é gerado por LLM local a partir do abstract, não do texto completo. "
     "Sempre confira no link original antes de citar."
 )
+AVISO_SEM_ABSTRACT = (
+    "Este paper não tem abstract na base, então não há resumo. Abra o link original."
+)
+AVISO_SEM_RESUMO_CONNECTOR = (
+    "Não há resumo deste paper em cache, e este servidor (modo connector) não gera "
+    "resumos sob demanda. Abra o link original."
+)
 
 # Teto da janela: a base guarda o que o sync coletou, e um valor enorme de
 # 'dias' estourava a aritmética de data em vez de devolver um aviso útil.
@@ -222,8 +229,13 @@ async def resumir_paper(
     qwen_endpoint: str,
     qwen_model: str,
     timeout_segundos: float = 180.0,
+    somente_cache: bool = False,
 ) -> RespostaResumo:
-    """Resumo estruturado de um paper, com cache."""
+    """Resumo estruturado de um paper, com cache.
+
+    Com ``somente_cache`` (modo connector), não chama o LLM nem escreve na base:
+    devolve o resumo cacheado ou diz explicitamente que não há resumo.
+    """
     linha, aviso = _ler(caminho_db, lambda c: por_chave(c, paper_id))
     if aviso:
         return RespostaResumo(chave=paper_id, titulo="", url="", origem="indisponivel", aviso=aviso)
@@ -253,6 +265,20 @@ async def resumir_paper(
             ),
             origem="cache",
             aviso=AVISO_RESUMO,
+        )
+
+    if somente_cache:
+        # Mesma regra do caminho com LLM: sem abstract, não há o que resumir.
+        if not (linha.get("abstract") or "").strip():
+            motivo = AVISO_SEM_ABSTRACT
+        else:
+            motivo = AVISO_SEM_RESUMO_CONNECTOR
+        return RespostaResumo(
+            chave=linha["chave"],
+            titulo=linha["titulo"],
+            url=linha["url"],
+            origem="indisponivel",
+            aviso=motivo,
         )
 
     topicos = [t for t in (linha.get("topicos") or "").split("|") if t]

@@ -207,7 +207,7 @@ class PubMed:
     async def buscar_ids(self, query: str, *, dias: int, max_ids: int = MAX_IDS) -> list[str]:
         """IDs dos papers que entraram no PubMed no período e casam com a query.
 
-        Pagina até o ``count`` do esearch. Se passar de ``max_ids``, para ali e
+        Página até o ``count`` do esearch. Se passar de ``max_ids``, para ali e
         registra um aviso no log.
         """
         ids: list[str] = []

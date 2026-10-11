@@ -3,6 +3,19 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). O projeto
 segue [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [Não publicado]
+
+### Adicionado
+
+- Modo connector: com `TRANSPORTE=streamable-http` o servidor atende por HTTP, com teto
+  de requisições global e por origem, validação de `Host` (`HTTP_HOSTS_PUBLICOS`) e a unit
+  `deploy/radar-papers-connector.service`. O padrão continua stdio.
+
+### Mudou
+
+- No modo connector, `resumir_paper` não chama o LLM nem grava na base: devolve só o
+  resumo em cache e, sem cache, diz explicitamente que não há resumo.
+
 ## [0.1.0] - 2026-09-24
 
 Primeira versão pública.

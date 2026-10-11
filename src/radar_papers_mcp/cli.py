@@ -15,6 +15,7 @@ from radar_papers_mcp.llm.qwen_client import QwenClient
 from radar_papers_mcp.mcp_server.tools.papers import buscar_papers_novos, resumir_paper
 from radar_papers_mcp.store.db import conectar
 from radar_papers_mcp.store.queries import corrigir_data_entrada, ids_pubmed
+from radar_papers_mcp.store.troca import BaseSuspeita, clonar_para_construcao, publicar
 
 app = typer.Typer(help="Administração do radar-papers-mcp", no_args_is_help=True)
 
@@ -33,8 +34,19 @@ def topicos() -> None:
 def sync(
     dias: int = typer.Option(7, help="Janela de busca"),
     sem_medrxiv: bool = typer.Option(False, help="Só PubMed"),
+    publicar_ao_fim: bool = typer.Option(
+        False,
+        "--publicar",
+        help="Constrói a base ao lado e troca por rename no fim (evita o inchaço)",
+    ),
+    forcar: bool = typer.Option(False, "--forcar", help="Publica mesmo se a base nova encolheu"),
 ) -> None:
-    """Busca papers novos e grava na base local."""
+    """Busca papers novos e grava na base local.
+
+    Com ``--publicar``, a coleta escreve numa base nova, clonada da atual, e só
+    troca pela servida no fim. O clone sai compactado, o que evita o inchaço de
+    quem faz upsert diário direto no arquivo: 9,3 MB viraram 3,5 MB.
+    """
     config = carregar_config()
     logging.basicConfig(
         level=getattr(logging, config.log_level.upper(), logging.INFO),
@@ -43,7 +55,8 @@ def sync(
 
     async def rodar() -> ResultadoSync:
         lista = carregar_topicos(config.topicos_path)
-        with conectar(config.duckdb_path) as conexao:
+        alvo = clonar_para_construcao(config.duckdb_path) if publicar_ao_fim else config.duckdb_path
+        with conectar(alvo) as conexao:
             resultado = await sincronizar(
                 conexao,
                 lista,
@@ -58,6 +71,18 @@ def sync(
         return resultado
 
     resultado = asyncio.run(rodar())
+
+    # Publica antes de tratar a falha parcial: o clone nunca tem menos que a base
+    # servida, porque nasce como copia dela. Deixar o clone orfao perderia o que
+    # as fontes que funcionaram trouxeram, e manteria o inchaco na servida.
+    if publicar_ao_fim:
+        try:
+            publicado = publicar(config.duckdb_path, forcar=forcar)
+        except BaseSuspeita as erro:
+            typer.secho(f"publicação recusada: {erro}", fg=typer.colors.RED)
+            raise typer.Exit(code=1) from erro
+        typer.secho(f"base publicada: {publicado}", fg=typer.colors.GREEN)
+
     if resultado.falhas:
         # Código de saída não zero para o systemd marcar o serviço como falho e
         # disparar o OnFailure; o que as outras fontes trouxeram já foi gravado.
