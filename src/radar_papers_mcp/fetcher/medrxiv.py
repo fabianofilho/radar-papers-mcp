@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 BASE = "https://api.medrxiv.org/details"
 FONTE = "medrxiv"
-# Identifica o projeto para quem administra o portal, com link para o repositorio.
+# Identifica o projeto para quem administra o portal, com link para o repositório.
 # Um coletor publico anonimo e ma cidadania: se algo incomodar do outro lado,
 # precisa haver como descobrir o que e e falar com quem mantem.
 USER_AGENT = "radar-papers-mcp/0.1 (+https://github.com/fabianofilho/radar-papers-mcp)"
@@ -116,7 +116,7 @@ class MedRxiv:
     async def periodo(self, *, dias: int, max_paginas: int = MAX_PAGINAS) -> list[Paper]:
         """Preprints postados nos últimos ``dias``.
 
-        Pagina até o total que a API informa para a janela. A ordem da API não é
+        Página até o total que a API informa para a janela. A ordem da API não é
         cronológica, então parar antes do fim deixaria buracos em dias quaisquer
         da janela. Se ``max_paginas`` for atingido, registra um aviso no log.
         """
