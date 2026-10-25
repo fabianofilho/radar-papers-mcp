@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Annotated, Literal
 
 import yaml
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,53 @@ class Config(BaseSettings):
     duckdb_path: Path = Field(default=Path("./data/papers.duckdb"))
     topicos_path: Path = Field(default=Path("./config/topicos.yaml"))
     log_level: str = Field(default="INFO")
+
+    # --- modo connector (servidor HTTP público) ---
+    # Por padrão o servidor fala stdio: o cliente sobe o processo na máquina de
+    # quem usa. Em "streamable-http" ele vira um servidor alcançável pela rede,
+    # que é o que o Claude aceita como custom connector.
+    transporte: Literal["stdio", "streamable-http"] = Field(default="stdio")
+    http_host: str = Field(default="127.0.0.1")
+    http_porta: int = Field(default=8000, ge=1, le=65535)
+    http_path: str = Field(default="/mcp")
+    # Stateless: cada requisição é independente, sem sessão guardada no servidor.
+    # Escala melhor e simplifica o deploy; para duas tools de consulta, basta.
+    http_stateless: bool = Field(default=True)
+    # Dois tetos por minuto. O global é o que protege a máquina: quando o
+    # Claude.ai chama um connector, as requisições chegam dos IPs da Anthropic,
+    # então limitar por IP colocaria todos os usuários no mesmo balde. O por
+    # origem serve contra quem chama o servidor direto, fora do Claude.
+    http_limite_global_por_minuto: int = Field(default=1200, ge=1)
+    http_limite_por_minuto: int = Field(default=600, ge=1)
+    # Nomes pelos quais o servidor aceita ser chamado, separados por vírgula.
+    # Vazio significa só loopback. O SDK valida o cabeçalho Host contra esta
+    # lista e responde 421 fora dela: é defesa contra DNS rebinding, onde um
+    # site qualquer faz o navegador da vítima falar com um servidor local. Atrás
+    # de um proxy ou túnel, o Host que chega é o nome público, então ele precisa
+    # constar aqui; a alternativa seria desligar a checagem, que é pior.
+    # NoDecode: sem ele o pydantic-settings tenta ler o valor do .env como JSON
+    # antes do validador rodar, e uma lista separada por vírgula estoura.
+    http_hosts_publicos: Annotated[list[str], NoDecode] = Field(default_factory=list)
+
+    @field_validator("http_hosts_publicos", mode="before")
+    @classmethod
+    def _dividir_hosts(cls, valor: object) -> object:
+        """Aceita "a.exemplo,b.exemplo" do .env, não só lista JSON."""
+        if isinstance(valor, str):
+            return [p.strip() for p in valor.split(",") if p.strip()]
+        return valor
+
+    @property
+    def modo_connector(self) -> bool:
+        """No modo connector o servidor não chama o LLM nem escreve na base.
+
+        Resumir sob demanda exigiria inferência paga por quem hospeda e escrita
+        no arquivo que o próprio servidor lê, e o DuckDB recusa abrir para
+        escrita com um leitor aberto. No connector, resumir_paper só devolve o
+        que já está no cache, gerado fora do servidor (papers-cli resumir ou o
+        servidor em stdio).
+        """
+        return self.transporte != "stdio"
 
 
 @dataclass(frozen=True)
