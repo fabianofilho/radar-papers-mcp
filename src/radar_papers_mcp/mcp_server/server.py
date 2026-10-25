@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import sys
+from pathlib import Path
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import Icon
 
 from radar_papers_mcp.config import TopicosInvalidos, carregar_config, carregar_topicos
 from radar_papers_mcp.mcp_server.capacidades import esconder_o_que_nao_existe
@@ -17,10 +20,22 @@ from radar_papers_mcp.mcp_server.tools.papers import resumir_paper as _resumir_p
 
 logger = logging.getLogger(__name__)
 
-mcp = MCPServer("radar-papers-mcp", version="0.1.0")
+# Ícone do servidor e das tools, no molde da família (ecg-mcp): o robô do IA.med
+# com página com o sinal do radar no visor. Em data URI, e não URL: o cliente precisa ver o
+# ícone antes de autenticar, e o endereço do Funnel é um só para todos os servidores.
+ICONE = [
+Icon(
+    src="data:image/svg+xml;base64,"
+    + base64.b64encode((Path(__file__).parent / "icone.svg").read_bytes()).decode(),
+    mimeType="image/svg+xml",
+    sizes=["any"],
+)
+]
+
+mcp = MCPServer("radar-papers-mcp", version="0.1.0", icons=ICONE)
 
 
-@mcp.tool()
+@mcp.tool(icons=ICONE)
 async def buscar_papers_novos(topico: str = "", dias: int = 7, limite: int = 50) -> RespostaBusca:
     """Papers que entraram no PubMed ou no medRxiv nos últimos dias, por tópico monitorado.
 
@@ -53,7 +68,7 @@ async def buscar_papers_novos(topico: str = "", dias: int = 7, limite: int = 50)
     )
 
 
-@mcp.tool()
+@mcp.tool(icons=ICONE)
 async def resumir_paper(paper_id: str) -> RespostaResumo:
     """Resumo estruturado de um paper: problema, método, achado e relevância.
 
