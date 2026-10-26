@@ -32,8 +32,14 @@ Environment=HTTP_STATELESS=true
 # Nome público pelo qual o túnel ou proxy chama este servidor. Sem ele, o SDK
 # responde 421 (Invalid Host) a tudo que vier de fora, por proteção contra DNS
 # rebinding. Vários nomes separados por vírgula.
-Environment=HTTP_HOSTS_PUBLICOS=debian-f.tailf42a96.ts.net
+# Host publico desde 25/10/2026: mcp.iamed.cc (Traefik da VPS, pela tailnet). O nome
+# debian-f.tailf42a96.ts.net segue valido dentro da tailnet (tailscale serve); o Funnel acabou.
+Environment=HTTP_HOSTS_PUBLICOS=debian-f.tailf42a96.ts.net,mcp.iamed.cc
 ExecStart=%h/.local/bin/uv --directory %h/radar-papers-mcp run radar-papers-mcp
+
+# O uvicorn espera as conexoes abertas (SSE do claude.ai) e so saia no SIGKILL dos 90 s
+# padrao (medido em 25/10/2026). Servidor sem estado: 15 s bastam para um restart.
+TimeoutStopSec=15
 Restart=always
 RestartSec=5
 ProtectSystem=strict
